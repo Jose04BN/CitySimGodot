@@ -137,7 +137,7 @@ func _tick_simulation() -> void:
 
 	# Zone growth/decay logic every tick
 	_apply_zone_growth(snapshot)
-	_build_controller.call("set_city_environment", _pollution, _happiness)
+	_build_controller.call("set_city_environment", _pollution, _happiness, _health_alert, _health_crisis_timer)
 
 	# record history
 	_pop_history.append(_population)

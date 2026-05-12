@@ -75,7 +75,15 @@ func set_pollution_overlay(entries: Array) -> void:
 		var overlay := MeshInstance3D.new()
 		overlay.mesh = overlay_mesh
 		var mat := StandardMaterial3D.new()
-		mat.albedo_color = Color(0.15 + intensity * 0.8, 0.2, 0.12, 0.12 + intensity * 0.45)
+		# support optional explicit color per entry (r,g,b,a)
+		if entry.has("r") and entry.has("g") and entry.has("b"):
+			var ra: float = float(entry.get("r", 0.15))
+			var ga: float = float(entry.get("g", 0.2))
+			var ba: float = float(entry.get("b", 0.12))
+			var aa: float = float(entry.get("a", 0.12 + intensity * 0.45))
+			mat.albedo_color = Color(clampf(ra,0.0,1.0), clampf(ga,0.0,1.0), clampf(ba,0.0,1.0), clampf(aa,0.0,1.0))
+		else:
+			mat.albedo_color = Color(0.15 + intensity * 0.8, 0.2, 0.12, 0.12 + intensity * 0.45)
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		mat.flags_transparent = true
 		mat.roughness = 1.0

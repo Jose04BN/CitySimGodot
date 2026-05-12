@@ -282,14 +282,14 @@ func get_city_snapshot() -> Dictionary:
 		"zones_detail": zones_detail
 	}
 
-func set_city_environment(pollution: float, happiness: float) -> void:
+func set_city_environment(pollution: float, happiness: float, health_alert: String = "Stable", health_timer: float = 0.0) -> void:
 	_city_pollution = clampf(pollution, 0.0, 100.0)
 	_city_happiness = clampf(happiness, 0.0, 100.0)
 	for zone_node in _zone_tiles.values():
 		(zone_node as Node).call("set_environment", pollution, happiness)
-	_refresh_pollution_overlay()
+	_refresh_pollution_overlay(health_alert, health_timer)
 
-func _refresh_pollution_overlay() -> void:
+func _refresh_pollution_overlay(health_alert: String = "Stable", health_timer: float = 0.0) -> void:
 	if _grid == null:
 		return
 	var overlay_entries: Array = []
@@ -311,6 +311,11 @@ func _refresh_pollution_overlay() -> void:
 		for d in directions:
 			var neighbor: Vector2i = cell + d
 			overlay_entries.append({"x": neighbor.x, "y": neighbor.y, "intensity": clampf(base_intensity * 0.45, 0.0, 1.0)})
+		# add a red crisis tint for industrial zones during health alerts
+		if health_alert != "Stable" and zone_type == BuildMode.INDUSTRIAL:
+			var crisis_strength := clampf(health_timer / 12.0, 0.0, 1.0)
+			overlay_entries.append({"x": cell.x, "y": cell.y, "intensity": clampf(0.6 + crisis_strength * 0.35, 0.0, 1.0), "r": 1.0, "g": 0.15, "b": 0.15, "a": 0.18 + crisis_strength * 0.45})
+
 	_grid.call("set_pollution_overlay_visible", _pollution_overlay_visible)
 	_grid.call("set_pollution_overlay", overlay_entries)
 

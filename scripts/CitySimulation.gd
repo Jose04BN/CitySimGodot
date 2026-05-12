@@ -37,6 +37,7 @@ var _vehicle_count: int = 0
 var _congestion_factor: float = 1.0
 var _commuters: int = 0
 var _traffic_pressure: float = 0.0
+var _commute_access_score: float = 0.5
 var _citizen_spawn_accum: float = 0.0
 var _citizen_scene: Script = preload("res://scripts/Citizen.gd")
 
@@ -83,8 +84,10 @@ func _tick_simulation() -> void:
 	var com_jobs: int = com_zones * 8
 	var ind_jobs: int = ind_zones * 14
 	var jobs_capacity: int = com_jobs + ind_jobs
+ 
+	var commute_bonus: float = 1.0 + _commute_access_score * 0.18
 
-	var desired_population: int = mini(res_capacity, int(float(jobs_capacity) * 1.15))
+	var desired_population: int = mini(res_capacity, int(float(jobs_capacity) * 1.15 * commute_bonus))
 	if desired_population > _population:
 		var growth: int = maxi(1, int(ceil(float(desired_population - _population) * 0.08)))
 		_population += growth
@@ -99,12 +102,13 @@ func _tick_simulation() -> void:
 	service_cost += float(_vehicle_count) * 0.25
 	service_cost += _traffic_pressure * 10.0
 	tax_income += float(_commuters) * 0.2
+	tax_income += _commute_access_score * 2.0
 	tax_income -= _traffic_pressure * 4.0
 	_treasury += tax_income - service_cost
 
-	_r_demand = clampf(50.0 + float(jobs_capacity - _population) * 0.25 - float(res_zones) * 0.4 - _traffic_pressure * 0.9, 0.0, 100.0)
-	_c_demand = clampf(45.0 + float(_population - com_jobs) * 0.30 + float(roads) * 0.08 - _traffic_pressure * 0.7, 0.0, 100.0)
-	_i_demand = clampf(40.0 + float(_population - ind_jobs) * 0.22 + float(roads) * 0.06 - float(_vehicle_count) * 0.5 - _traffic_pressure * 1.0, 0.0, 100.0)
+	_r_demand = clampf(50.0 + float(jobs_capacity - _population) * 0.25 - float(res_zones) * 0.4 - _traffic_pressure * 0.9 + _commute_access_score * 18.0, 0.0, 100.0)
+	_c_demand = clampf(45.0 + float(_population - com_jobs) * 0.30 + float(roads) * 0.08 - _traffic_pressure * 0.7 + _commute_access_score * 10.0, 0.0, 100.0)
+	_i_demand = clampf(40.0 + float(_population - ind_jobs) * 0.22 + float(roads) * 0.06 - float(_vehicle_count) * 0.5 - _traffic_pressure * 1.0 - _commute_access_score * 4.0, 0.0, 100.0)
 
 	_sim_hours += 0.25
 	if _sim_hours >= 24.0:
@@ -173,11 +177,11 @@ func _apply_zone_growth(snapshot: Dictionary) -> void:
 		var demand: float = 50.0
 		match ztype:
 			BuildMode.RESIDENTIAL:
-				demand = _r_demand - _traffic_pressure * 0.5
+				demand = _r_demand - _traffic_pressure * 0.5 + _commute_access_score * 12.0
 			BuildMode.COMMERCIAL:
-				demand = _c_demand - _traffic_pressure * 0.35
+				demand = _c_demand - _traffic_pressure * 0.35 + _commute_access_score * 6.0
 			BuildMode.INDUSTRIAL:
-				demand = _i_demand - _traffic_pressure * 0.8
+				demand = _i_demand - _traffic_pressure * 0.8 - (1.0 - _commute_access_score) * 8.0
 
 		# Upgrade if demand strong and connected
 		if demand >= 70.0 and connected and level < 3 and _congestion_factor >= 0.55:
@@ -207,7 +211,7 @@ func _update_stats_label() -> void:
 	var unemployment: int = maxi(_population - employed, 0)
 	var households: int = int(round(float(_population) / 2.6))
 
-	_stats_label.text = "Time %02d:%02d  |  Pop %d  HH %d  Jobs %d  Unemp %d  Treasury $%d\nRoads %d  Zones R:%d C:%d I:%d  |  Demand R:%d C:%d I:%d  |  Traffic %d  Cong %.2f  Pressure %.1f  Comm %d  Citizens %d" % [
+	_stats_label.text = "Time %02d:%02d  |  Pop %d  HH %d  Jobs %d  Unemp %d  Treasury $%d\nRoads %d  Zones R:%d C:%d I:%d  |  Demand R:%d C:%d I:%d  |  Traffic %d  Cong %.2f  Pressure %.1f  Access %.2f  Comm %d  Citizens %d" % [
 		int(floor(_sim_hours)),
 		int(round((_sim_hours - floor(_sim_hours)) * 60.0)) % 60,
 		_population,
@@ -225,6 +229,7 @@ func _update_stats_label() -> void:
 		_vehicle_count,
 		_congestion_factor,
 		_traffic_pressure,
+		_commute_access_score,
 		_commuters,
 		_citizens_parent.get_child_count() if _citizens_parent != null else 0
 	]
@@ -278,4 +283,5 @@ func _on_traffic_changed(vehicle_count: int, congestion_factor: float) -> void:
 	_vehicle_count = vehicle_count
 	_congestion_factor = clampf(congestion_factor, 0.35, 1.0)
 	_traffic_pressure = float(_vehicle_count) * (1.0 - _congestion_factor) * 1.5
+	_commute_access_score = clampf(1.0 - (_traffic_pressure / 24.0), 0.0, 1.0)
 	_commuters = int(round(float(_population) * (1.0 - _congestion_factor) * 0.55))

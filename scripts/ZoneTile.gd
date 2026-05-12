@@ -4,18 +4,38 @@ extends Node3D
 var _zone_type := 1
 var _level: int = 1
 var _building_root: Node3D = null
+var _base_color: Color = Color(0.4, 0.8, 0.4, 0.6)
+var _pollution: float = 0.0
+var _happiness: float = 60.0
 
 func set_zone(zone_type: int) -> void:
 	_zone_type = zone_type
 	_level = 1
-	var color := Color(0.4, 0.8, 0.4, 0.6)
+	_base_color = Color(0.4, 0.8, 0.4, 0.6)
 	match zone_type:
 		1:
-			color = Color(0.3, 0.85, 0.3, 0.6) # Residential
+			_base_color = Color(0.3, 0.85, 0.3, 0.6) # Residential
 		2:
-			color = Color(0.2, 0.6, 0.95, 0.6) # Commercial
+			_base_color = Color(0.2, 0.6, 0.95, 0.6) # Commercial
 		3:
-			color = Color(0.95, 0.7, 0.2, 0.6) # Industrial
+			_base_color = Color(0.95, 0.7, 0.2, 0.6) # Industrial
+	_apply_zone_material()
+	_refresh_building_visuals()
+
+func set_environment(pollution: float, happiness: float) -> void:
+	_pollution = clampf(pollution, 0.0, 100.0)
+	_happiness = clampf(happiness, 0.0, 100.0)
+	_apply_zone_material()
+	_refresh_building_visuals()
+
+func _apply_zone_material() -> void:
+	var pollution_mix: float = clampf(_pollution / 100.0, 0.0, 1.0)
+	var happiness_mix: float = clampf(_happiness / 100.0, 0.0, 1.0)
+	var color := _base_color
+	var polluted_color := Color(0.32, 0.28, 0.2, 0.6)
+	var bright_color := Color(0.95, 0.95, 0.85, 0.6)
+	color = color.lerp(polluted_color, pollution_mix * 0.55)
+	color = color.lerp(bright_color, happiness_mix * 0.18)
 
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
@@ -100,12 +120,18 @@ func _refresh_building_visuals() -> void:
 		_building_root.add_child(smoke_stack)
 
 func _get_zone_color() -> Color:
+	var color := _base_color
 	match _zone_type:
 		1:
-			return Color(0.3, 0.85, 0.3)
+			color = Color(0.3, 0.85, 0.3)
 		2:
-			return Color(0.2, 0.6, 0.95)
+			color = Color(0.2, 0.6, 0.95)
 		3:
-			return Color(0.95, 0.7, 0.2)
+			color = Color(0.95, 0.7, 0.2)
 		_:
-			return Color(0.4, 0.8, 0.4)
+			color = Color(0.4, 0.8, 0.4)
+	var polluted_color := Color(0.32, 0.28, 0.2)
+	var bright_color := Color(0.95, 0.95, 0.85)
+	color = color.lerp(polluted_color, clampf(_pollution / 100.0, 0.0, 1.0) * 0.55)
+	color = color.lerp(bright_color, clampf(_happiness / 100.0, 0.0, 1.0) * 0.18)
+	return color

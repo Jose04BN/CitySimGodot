@@ -123,6 +123,7 @@ func _tick_simulation() -> void:
 
 	# Zone growth/decay logic every tick
 	_apply_zone_growth(snapshot)
+	_build_controller.call("set_city_environment", _pollution, _happiness)
 
 	# record history
 	_pop_history.append(_population)
@@ -302,6 +303,7 @@ func _on_city_loaded(payload: Dictionary) -> void:
 	_i_demand = float(sim.get("i_demand", 50.0))
 	_pollution = float(sim.get("pollution", 12.0))
 	_happiness = float(sim.get("happiness", 60.0))
+	_build_controller.call("set_city_environment", _pollution, _happiness)
 
 func _on_traffic_changed(vehicle_count: int, congestion_factor: float) -> void:
 	_vehicle_count = vehicle_count

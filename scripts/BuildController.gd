@@ -275,6 +275,10 @@ func get_city_snapshot() -> Dictionary:
 		"zones_detail": zones_detail
 	}
 
+func set_city_environment(pollution: float, happiness: float) -> void:
+	for zone_node in _zone_tiles.values():
+		(zone_node as Node).call("set_environment", pollution, happiness)
+
 func get_road_cells() -> Array:
 	var out: Array = []
 	for key in _road_tiles.keys():

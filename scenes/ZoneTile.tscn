@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://qf8nrrrbrfsv"]
+
+[ext_resource type="Script" path="res://scripts/ZoneTile.gd" id="1"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_zone"]
+size = Vector3(1.8, 0.05, 1.8)
+
+[node name="ZoneTile" type="Node3D"]
+script = ExtResource("1")
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_zone")

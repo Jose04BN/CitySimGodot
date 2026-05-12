@@ -1,0 +1,35 @@
+# Godot
+.import/
+.export/
+export_presets.cfg
+.godot/
+*.import
+*.mono
+*.sconsign.dblite
+
+# OS
+Thumbs.db
+desktop.ini
+
+# Visual Studio
+.vs/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# User data
+user://
+# Godot
+.import/
+.export/
+*.import
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/

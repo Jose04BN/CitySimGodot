@@ -1,0 +1,66 @@
+[gd_scene load_steps=7 format=3 uid="uid://d4qhij7fu1asb"]
+
+[ext_resource type="Script" path="res://scripts/Grid.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/BuildController.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/RoadTile.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/ZoneTile.tscn" id="4"]
+[ext_resource type="Script" path="res://scripts/CameraController.gd" id="5"]
+[ext_resource type="Script" path="res://scripts/CitySimulation.gd" id="6"]
+
+[node name="Main" type="Node3D"]
+
+[node name="Grid" type="Node3D" parent="."]
+script = ExtResource("1")
+
+[node name="BuildController" type="Node3D" parent="."]
+script = ExtResource("2")
+grid_path = NodePath("../Grid")
+road_scene = ExtResource("3")
+zone_scene = ExtResource("4")
+roads_parent_path = NodePath("../Roads")
+zones_parent_path = NodePath("../Zones")
+hud_label_path = NodePath("../HUD/Panel/Label")
+
+[node name="CitySimulation" type="Node" parent="."]
+script = ExtResource("6")
+build_controller_path = NodePath("../BuildController")
+stats_label_path = NodePath("../HUD/Panel/StatsLabel")
+
+[node name="Roads" type="Node3D" parent="."]
+
+[node name="Zones" type="Node3D" parent="."]
+
+[node name="Camera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 20, 24, 18)
+script = ExtResource("5")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.894427, 0, -0.447214, 0.358569, 0.597614, 0.717137, 0.267261, -0.801784, 0.534522, 0, 0, 0)
+light_energy = 1.2
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Panel" type="Panel" parent="HUD"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -640.0
+
+[node name="Label" type="Label" parent="HUD/Panel"]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 8.0
+offset_right = 1172.0
+offset_bottom = 36.0
+text = "Mode: Road | 1 Road | 2 Residential | 3 Commercial | 4 Industrial | E Erase | LMB Place"
+
+[node name="StatsLabel" type="Label" parent="HUD/Panel"]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 42.0
+offset_right = 1172.0
+offset_bottom = 92.0
+text = "Time 08:00 | Pop 0 HH 0 Jobs 0 Unemp 0 Treasury $50000"

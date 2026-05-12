@@ -13,6 +13,8 @@ Current prototype features
 - `scripts/Grid.gd` — draws a buildable grid and provides hit/cell conversion helpers.
 - `scripts/BuildController.gd` — handles input modes and placement/erase logic.
 - `scripts/CitySimulation.gd` — runs a live city loop (time, population, jobs, treasury, demand).
+- `scripts/Pathfinder.gd` — simple grid A* pathfinding over road cells.
+- `scripts/TrafficController.gd` and `scripts/Vehicle.gd` — lightweight traffic agents that spawn on roads and travel between connected points.
 - `scenes/RoadTile.tscn` — road tile visual prefab.
 - `scenes/ZoneTile.tscn` + `scripts/ZoneTile.gd` — zone tile visual prefab and zone color mapping.
 - `scripts/Citizen.gd` — minimal agent script for next milestones.
@@ -30,6 +32,12 @@ Controls
 - Right mouse drag rotates camera
 - `W/A/S/D` moves camera pivot
 - Mouse wheel zooms camera
+
+Traffic prototype
+
+- The main scene now includes a `TrafficController` node that uses road cells and `Pathfinder.gd` to spawn simple vehicles.
+- Traffic is intentionally capped and slow so it stays readable while the prototype is still small.
+- Vehicle agents are visual placeholders for later commuter and congestion systems.
 
 Notes
 

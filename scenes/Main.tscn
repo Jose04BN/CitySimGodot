@@ -6,6 +6,8 @@
 [ext_resource type="PackedScene" path="res://scenes/ZoneTile.tscn" id="4"]
 [ext_resource type="Script" path="res://scripts/CameraController.gd" id="5"]
 [ext_resource type="Script" path="res://scripts/CitySimulation.gd" id="6"]
+[ext_resource type="Script" path="res://scripts/Pathfinder.gd" id="7"]
+[ext_resource type="Script" path="res://scripts/TrafficController.gd" id="8"]
 
 [node name="Main" type="Node3D"]
 
@@ -25,6 +27,17 @@ hud_label_path = NodePath("../HUD/Panel/Label")
 script = ExtResource("6")
 build_controller_path = NodePath("../BuildController")
 stats_label_path = NodePath("../HUD/Panel/StatsLabel")
+
+[node name="Pathfinder" type="Node" parent="."]
+script = ExtResource("7")
+grid_path = NodePath("../Grid")
+build_controller_path = NodePath("../BuildController")
+
+[node name="TrafficController" type="Node" parent="."]
+script = ExtResource("8")
+grid_path = NodePath("../Grid")
+build_controller_path = NodePath("../BuildController")
+pathfinder_path = NodePath("../Pathfinder")
 
 [node name="Roads" type="Node3D" parent="."]
 

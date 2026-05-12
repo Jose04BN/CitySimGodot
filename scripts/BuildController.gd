@@ -24,6 +24,9 @@ var _roads_parent: Node3D
 var _zones_parent: Node3D
 var _hud_label: Label
 var _mode: BuildMode = BuildMode.ROAD
+var _pollution_overlay_visible: bool = true
+var _city_pollution: float = 0.0
+var _city_happiness: float = 60.0
 
 var _road_tiles: Dictionary = {}
 var _zone_tiles: Dictionary = {}
@@ -34,6 +37,7 @@ func _ready() -> void:
 	_zones_parent = get_node(zones_parent_path)
 	_hud_label = get_node_or_null(hud_label_path)
 	_update_hud()
+	_refresh_pollution_overlay()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -54,6 +58,9 @@ func _match_mode_shortcut(keycode: Key) -> void:
 			_mode = BuildMode.INDUSTRIAL
 		KEY_E:
 			_mode = BuildMode.ERASE
+		KEY_H:
+			_pollution_overlay_visible = not _pollution_overlay_visible
+			_refresh_pollution_overlay()
 		KEY_F5:
 			save_city()
 			return
@@ -178,7 +185,7 @@ func _update_hud() -> void:
 		BuildMode.ERASE:
 			mode_text = "Erase"
 
-	_hud_label.text = "Mode: %s | 1 Road | 2 Residential | 3 Commercial | 4 Industrial | E Erase | LMB Place | F5 Save | F9 Load | RMB Rotate Camera | WASD Move" % mode_text
+	_hud_label.text = "Mode: %s | 1 Road | 2 Residential | 3 Commercial | 4 Industrial | E Erase | H Overlay | LMB Place | F5 Save | F9 Load | RMB Rotate Camera | WASD Move" % mode_text
 
 func save_city() -> void:
 	var roads: Array = []
@@ -276,8 +283,36 @@ func get_city_snapshot() -> Dictionary:
 	}
 
 func set_city_environment(pollution: float, happiness: float) -> void:
+	_city_pollution = clampf(pollution, 0.0, 100.0)
+	_city_happiness = clampf(happiness, 0.0, 100.0)
 	for zone_node in _zone_tiles.values():
 		(zone_node as Node).call("set_environment", pollution, happiness)
+	_refresh_pollution_overlay()
+
+func _refresh_pollution_overlay() -> void:
+	if _grid == null:
+		return
+	var overlay_entries: Array = []
+	for key in _zone_tiles.keys():
+		var zone_node: Node = _zone_tiles[key]
+		var zone_type: int = int(zone_node.call("get_zone_type"))
+		var level: int = int(zone_node.call("get_level"))
+		var cell := _key_to_cell(str(key))
+		var base_intensity := 0.0
+		match zone_type:
+			BuildMode.RESIDENTIAL:
+				base_intensity = 0.12 + float(level) * 0.04 + _city_pollution * 0.002
+			BuildMode.COMMERCIAL:
+				base_intensity = 0.18 + float(level) * 0.05 + _city_pollution * 0.003
+			BuildMode.INDUSTRIAL:
+				base_intensity = 0.34 + float(level) * 0.09 + _city_pollution * 0.004
+		overlay_entries.append({"x": cell.x, "y": cell.y, "intensity": clampf(base_intensity, 0.0, 1.0)})
+		var directions: Array = [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]
+		for d in directions:
+			var neighbor: Vector2i = cell + d
+			overlay_entries.append({"x": neighbor.x, "y": neighbor.y, "intensity": clampf(base_intensity * 0.45, 0.0, 1.0)})
+	_grid.call("set_pollution_overlay_visible", _pollution_overlay_visible)
+	_grid.call("set_pollution_overlay", overlay_entries)
 
 func get_road_cells() -> Array:
 	var out: Array = []

@@ -40,6 +40,8 @@ var _traffic_pressure: float = 0.0
 var _commute_access_score: float = 0.5
 var _pollution: float = 12.0
 var _happiness: float = 60.0
+var _health_alert: String = "Stable"
+var _health_crisis_timer: float = 0.0
 var _citizen_spawn_accum: float = 0.0
 var _citizen_scene: Script = preload("res://scripts/Citizen.gd")
 
@@ -91,10 +93,14 @@ func _tick_simulation() -> void:
 
 	_pollution = clampf(_pollution + float(ind_zones) * 0.5 + float(_vehicle_count) * 0.12 - float(roads) * 0.08 - 0.6, 0.0, 100.0)
 	_happiness = clampf(70.0 + _commute_access_score * 18.0 - _traffic_pressure * 0.5 - _pollution * 0.45, 0.0, 100.0)
+	_update_health_state()
 
 	var desired_population: int = mini(res_capacity, int(float(jobs_capacity) * (0.9 + _happiness * 0.004) * commute_bonus))
 	if desired_population > _population:
-		var growth: int = maxi(1, int(ceil(float(desired_population - _population) * (0.05 + _happiness * 0.0005))))
+		var growth_rate: float = 0.05 + _happiness * 0.0005
+		if _health_alert != "Stable":
+			growth_rate *= 0.65
+		var growth: int = maxi(1, int(ceil(float(desired_population - _population) * growth_rate)))
 		_population += growth
 	elif desired_population < _population:
 		var decline: int = maxi(1, int(ceil(float(_population - desired_population) * 0.05)))
@@ -107,15 +113,23 @@ func _tick_simulation() -> void:
 	service_cost += float(_vehicle_count) * 0.25
 	service_cost += _traffic_pressure * 10.0
 	service_cost += _pollution * 0.12
+	if _health_alert != "Stable":
+		service_cost += 12.0
 	tax_income += float(_commuters) * 0.2
 	tax_income += _commute_access_score * 2.0
 	tax_income += _happiness * 0.05
+	if _health_alert != "Stable":
+		tax_income -= 8.0
 	tax_income -= _traffic_pressure * 4.0
 	_treasury += tax_income - service_cost
 
 	_r_demand = clampf(50.0 + float(jobs_capacity - _population) * 0.25 - float(res_zones) * 0.4 - _traffic_pressure * 0.9 + _commute_access_score * 18.0 + _happiness * 0.25 - _pollution * 0.4, 0.0, 100.0)
 	_c_demand = clampf(45.0 + float(_population - com_jobs) * 0.30 + float(roads) * 0.08 - _traffic_pressure * 0.7 + _commute_access_score * 10.0 + _happiness * 0.15, 0.0, 100.0)
 	_i_demand = clampf(40.0 + float(_population - ind_jobs) * 0.22 + float(roads) * 0.06 - float(_vehicle_count) * 0.5 - _traffic_pressure * 1.0 - _commute_access_score * 4.0 + _pollution * 0.3, 0.0, 100.0)
+	if _health_alert != "Stable":
+		_r_demand = clampf(_r_demand - 4.0, 0.0, 100.0)
+		_c_demand = clampf(_c_demand - 2.0, 0.0, 100.0)
+		_i_demand = clampf(_i_demand - 1.0, 0.0, 100.0)
 
 	_sim_hours += 0.25
 	if _sim_hours >= 24.0:
@@ -230,7 +244,7 @@ func _update_stats_label() -> void:
 	var unemployment: int = maxi(_population - employed, 0)
 	var households: int = int(round(float(_population) / 2.6))
 
-	_stats_label.text = "Time %02d:%02d  |  Pop %d  HH %d  Jobs %d  Unemp %d  Treasury $%d\nRoads %d  Zones R:%d C:%d I:%d  |  Demand R:%d C:%d I:%d  |  Traffic %d  Cong %.2f  Pressure %.1f  Access %.2f  Pollution %.1f  Happy %.1f  Comm %d  Citizens %d" % [
+	_stats_label.text = "Time %02d:%02d  |  Pop %d  HH %d  Jobs %d  Unemp %d  Treasury $%d\nRoads %d  Zones R:%d C:%d I:%d  |  Demand R:%d C:%d I:%d  |  Traffic %d  Cong %.2f  Pressure %.1f  Access %.2f  Pollution %.1f  Happy %.1f  Health %s  Comm %d  Citizens %d" % [
 		int(floor(_sim_hours)),
 		int(round((_sim_hours - floor(_sim_hours)) * 60.0)) % 60,
 		_population,
@@ -251,6 +265,7 @@ func _update_stats_label() -> void:
 		_commute_access_score,
 		_pollution,
 		_happiness,
+		_health_alert,
 		_commuters,
 		_citizens_parent.get_child_count() if _citizens_parent != null else 0
 	]
@@ -286,7 +301,9 @@ func _on_about_to_save(payload: Dictionary) -> void:
 		"c_demand": _c_demand,
 		"i_demand": _i_demand,
 		"pollution": _pollution,
-		"happiness": _happiness
+		"happiness": _happiness,
+		"health_alert": _health_alert,
+		"health_crisis_timer": _health_crisis_timer
 	}
 
 func _on_city_loaded(payload: Dictionary) -> void:
@@ -303,6 +320,8 @@ func _on_city_loaded(payload: Dictionary) -> void:
 	_i_demand = float(sim.get("i_demand", 50.0))
 	_pollution = float(sim.get("pollution", 12.0))
 	_happiness = float(sim.get("happiness", 60.0))
+	_health_alert = str(sim.get("health_alert", "Stable"))
+	_health_crisis_timer = float(sim.get("health_crisis_timer", 0.0))
 	_build_controller.call("set_city_environment", _pollution, _happiness)
 
 func _on_traffic_changed(vehicle_count: int, congestion_factor: float) -> void:
@@ -311,3 +330,19 @@ func _on_traffic_changed(vehicle_count: int, congestion_factor: float) -> void:
 	_traffic_pressure = float(_vehicle_count) * (1.0 - _congestion_factor) * 1.5
 	_commute_access_score = clampf(1.0 - (_traffic_pressure / 24.0), 0.0, 1.0)
 	_commuters = int(round(float(_population) * (1.0 - _congestion_factor) * 0.55))
+
+func _update_health_state() -> void:
+	if _pollution > 82.0 and _happiness < 32.0:
+		_health_crisis_timer = min(_health_crisis_timer + tick_seconds, 12.0)
+		_health_alert = "Smog Alert"
+		_population = maxi(_population - 1, 0)
+	elif _pollution > 65.0 and _happiness < 45.0:
+		_health_crisis_timer = max(_health_crisis_timer - tick_seconds * 0.5, 0.0)
+		_health_alert = "Warning"
+	else:
+		_health_crisis_timer = max(_health_crisis_timer - tick_seconds, 0.0)
+		_health_alert = "Stable"
+
+	if _health_crisis_timer > 0.0 and _health_alert == "Smog Alert":
+		_pollution = clampf(_pollution + 0.25, 0.0, 100.0)
+		_happiness = clampf(_happiness - 0.6, 0.0, 100.0)

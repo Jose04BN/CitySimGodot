@@ -1,10 +1,13 @@
 extends Node
 
 @export var build_controller_path: NodePath
+@export var pathfinder_path: NodePath
 @export var traffic_controller_path: NodePath
 @export var stats_label_path: NodePath
 @export var tick_seconds: float = 1.0
 @export var starting_treasury: float = 50000.0
+@export var citizen_spawn_interval: float = 2.0
+@export var citizen_cap: int = 18
 
 enum BuildMode {
 	ROAD,
@@ -15,8 +18,10 @@ enum BuildMode {
 }
 
 var _build_controller: Node
+var _pathfinder: Node
 var _traffic_controller: Node
 var _stats_label: Label
+var _citizens_parent: Node3D
 
 var _accum: float = 0.0
 var _sim_hours: float = 8.0
@@ -32,13 +37,19 @@ var _vehicle_count: int = 0
 var _congestion_factor: float = 1.0
 var _commuters: int = 0
 var _traffic_pressure: float = 0.0
+var _citizen_spawn_accum: float = 0.0
+var _citizen_scene: Script = preload("res://scripts/Citizen.gd")
 
 func _ready() -> void:
 	_build_controller = get_node(build_controller_path)
+	_pathfinder = get_node_or_null(pathfinder_path)
 	_traffic_controller = get_node_or_null(traffic_controller_path)
 	_stats_label = get_node_or_null(stats_label_path)
 	_treasury = starting_treasury
 	_traffic_pressure = 0.0
+	_citizens_parent = Node3D.new()
+	_citizens_parent.name = "Citizens"
+	add_child(_citizens_parent)
 
 	if _build_controller.has_signal("about_to_save"):
 		_build_controller.connect("about_to_save", Callable(self, "_on_about_to_save"))
@@ -54,6 +65,7 @@ func _process(delta: float) -> void:
 	while _accum >= tick_seconds:
 		_accum -= tick_seconds
 		_tick_simulation()
+		_spawn_commuters()
 	_update_stats_label()
 
 func _tick_simulation() -> void:
@@ -109,6 +121,47 @@ func _tick_simulation() -> void:
 	if _treasury_history.size() > _history_size:
 		_treasury_history.remove_at(0)
 
+func _spawn_commuters() -> void:
+	if _pathfinder == null or _citizens_parent == null:
+		return
+	_citizen_spawn_accum += tick_seconds
+	if _citizen_spawn_accum < citizen_spawn_interval:
+		return
+	_citizen_spawn_accum = 0.0
+	var available_slots: int = citizen_cap - _citizens_parent.get_child_count()
+	if available_slots <= 0:
+		return
+	var snapshot_variant: Variant = _build_controller.call("get_city_snapshot")
+	if typeof(snapshot_variant) != TYPE_DICTIONARY:
+		return
+	var snapshot: Dictionary = snapshot_variant
+	var residential_cells: Array = []
+	var job_cells: Array = []
+	for z in snapshot.get("zones_detail", []):
+		var ztype: int = int(z.get("type", 1))
+		var cell := Vector2i(int(z.get("x", 0)), int(z.get("y", 0)))
+		if ztype == BuildMode.RESIDENTIAL:
+			residential_cells.append(cell)
+		elif ztype == BuildMode.COMMERCIAL or ztype == BuildMode.INDUSTRIAL:
+			job_cells.append(cell)
+	if residential_cells.size() == 0 or job_cells.size() == 0:
+		return
+	var grid: Node = _build_controller.get_node(_build_controller.get("grid_path"))
+	var commuter_goal: int = mini(_commuters, available_slots)
+	for _i in range(commuter_goal):
+		var home_cell: Vector2i = residential_cells[randi() % residential_cells.size()]
+		var work_cell: Vector2i = job_cells[randi() % job_cells.size()]
+		var home_world: Vector3 = grid.call("cell_to_world", home_cell) + Vector3(0, 0.2, 0)
+		var work_world: Vector3 = grid.call("cell_to_world", work_cell) + Vector3(0, 0.2, 0)
+		var path: Array = _pathfinder.call("find_path_world", home_world, work_world)
+		if path.size() == 0:
+			continue
+		var citizen := Node3D.new()
+		citizen.set_script(_citizen_scene)
+		citizen.position = home_world
+		_citizens_parent.add_child(citizen)
+		citizen.call("set_path", path)
+
 func _apply_zone_growth(snapshot: Dictionary) -> void:
 	# snapshot contains zones_detail with x,y,type,level,connected
 	for z in snapshot.get("zones_detail", []):
@@ -154,7 +207,7 @@ func _update_stats_label() -> void:
 	var unemployment: int = maxi(_population - employed, 0)
 	var households: int = int(round(float(_population) / 2.6))
 
-	_stats_label.text = "Time %02d:%02d  |  Pop %d  HH %d  Jobs %d  Unemp %d  Treasury $%d\nRoads %d  Zones R:%d C:%d I:%d  |  Demand R:%d C:%d I:%d  |  Traffic %d  Cong %.2f  Pressure %.1f  Comm %d" % [
+	_stats_label.text = "Time %02d:%02d  |  Pop %d  HH %d  Jobs %d  Unemp %d  Treasury $%d\nRoads %d  Zones R:%d C:%d I:%d  |  Demand R:%d C:%d I:%d  |  Traffic %d  Cong %.2f  Pressure %.1f  Comm %d  Citizens %d" % [
 		int(floor(_sim_hours)),
 		int(round((_sim_hours - floor(_sim_hours)) * 60.0)) % 60,
 		_population,
@@ -172,7 +225,8 @@ func _update_stats_label() -> void:
 		_vehicle_count,
 		_congestion_factor,
 		_traffic_pressure,
-		_commuters
+		_commuters,
+		_citizens_parent.get_child_count() if _citizens_parent != null else 0
 	]
 
 	# append simple sparkline for population

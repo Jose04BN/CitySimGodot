@@ -15,6 +15,7 @@ Current prototype features
 - `scripts/CitySimulation.gd` — runs a live city loop (time, population, jobs, treasury, demand).
 - `scripts/Pathfinder.gd` — simple grid A* pathfinding over road cells.
 - `scripts/TrafficController.gd` and `scripts/Vehicle.gd` — lightweight traffic agents that spawn on roads, travel between connected points, and feed congestion back into the simulation.
+- `scripts/Citizen.gd` — commuter agent placeholder now used to spawn visible home-to-work commuters on the traffic network.
 - `scenes/RoadTile.tscn` — road tile visual prefab.
 - `scenes/ZoneTile.tscn` + `scripts/ZoneTile.gd` — zone tile visual prefab and zone color mapping.
 - `scripts/Citizen.gd` — minimal agent script for next milestones.
@@ -39,6 +40,7 @@ Traffic prototype
 - Traffic is intentionally capped and slow so it stays readable while the prototype is still small.
 - Vehicle agents are visual placeholders for later commuter and congestion systems.
 - Congestion now affects the simulation HUD and slightly changes treasury and industrial demand.
+- Commuter agents now spawn from residential to job zones and move along the road graph when paths exist.
 
 Notes
 

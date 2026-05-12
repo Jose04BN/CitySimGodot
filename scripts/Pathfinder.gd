@@ -30,16 +30,16 @@ func _is_walkable(cell: Vector2i) -> bool:
 func _manhattan(a: Vector2i, b: Vector2i) -> int:
     return abs(a.x - b.x) + abs(a.y - b.y)
 
-func find_path_world(start_world: Vector3, end_world: Vector3) -> Array:
+func find_path_world(start_world: Vector3, end_world: Vector3, road_costs: Dictionary = {}) -> Array:
     var start_cell: Vector2i = _grid.call("world_to_cell", start_world)
     var end_cell: Vector2i = _grid.call("world_to_cell", end_world)
-    var cells: Array = find_path_cells(start_cell, end_cell)
+    var cells: Array = find_path_cells(start_cell, end_cell, road_costs)
     var out: Array = []
     for c in cells:
         out.append(_grid.call("cell_to_world", c) + Vector3(0, 0.0, 0))
     return out
 
-func find_path_cells(start: Vector2i, goal: Vector2i) -> Array:
+func find_path_cells(start: Vector2i, goal: Vector2i, road_costs: Dictionary = {}) -> Array:
     # Simple A* on 4-neighborhood
     if start == goal:
         return [start]
@@ -86,7 +86,10 @@ func find_path_cells(start: Vector2i, goal: Vector2i) -> Array:
             if not _is_walkable(n):
                 continue
             var nk := _cell_key(n)
-            var tentative_g: int = int(g_score.get(current_key, 1000000000)) + 1
+            var step_cost: int = int(road_costs.get(nk, 1))
+            if step_cost < 1:
+                step_cost = 1
+            var tentative_g: int = int(g_score.get(current_key, 1000000000)) + step_cost
             if tentative_g < int(g_score.get(nk, 1000000000)):
                 came_from[nk] = current_key
                 g_score[nk] = tentative_g

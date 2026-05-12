@@ -31,12 +31,14 @@ var _treasury_history: Array = []
 var _vehicle_count: int = 0
 var _congestion_factor: float = 1.0
 var _commuters: int = 0
+var _traffic_pressure: float = 0.0
 
 func _ready() -> void:
 	_build_controller = get_node(build_controller_path)
 	_traffic_controller = get_node_or_null(traffic_controller_path)
 	_stats_label = get_node_or_null(stats_label_path)
 	_treasury = starting_treasury
+	_traffic_pressure = 0.0
 
 	if _build_controller.has_signal("about_to_save"):
 		_build_controller.connect("about_to_save", Callable(self, "_on_about_to_save"))
@@ -83,12 +85,14 @@ func _tick_simulation() -> void:
 	var tax_income: float = float(_population) * 1.8 + float(com_zones) * 4.0 + float(ind_zones) * 5.5
 	var service_cost: float = float(roads) * 1.4 + float(_population) * 0.7 + 40.0
 	service_cost += float(_vehicle_count) * 0.25
+	service_cost += _traffic_pressure * 10.0
 	tax_income += float(_commuters) * 0.2
+	tax_income -= _traffic_pressure * 4.0
 	_treasury += tax_income - service_cost
 
-	_r_demand = clampf(50.0 + float(jobs_capacity - _population) * 0.25 - float(res_zones) * 0.4, 0.0, 100.0)
-	_c_demand = clampf(45.0 + float(_population - com_jobs) * 0.30 + float(roads) * 0.08, 0.0, 100.0)
-	_i_demand = clampf(40.0 + float(_population - ind_jobs) * 0.22 + float(roads) * 0.06 - float(_vehicle_count) * 0.5, 0.0, 100.0)
+	_r_demand = clampf(50.0 + float(jobs_capacity - _population) * 0.25 - float(res_zones) * 0.4 - _traffic_pressure * 0.9, 0.0, 100.0)
+	_c_demand = clampf(45.0 + float(_population - com_jobs) * 0.30 + float(roads) * 0.08 - _traffic_pressure * 0.7, 0.0, 100.0)
+	_i_demand = clampf(40.0 + float(_population - ind_jobs) * 0.22 + float(roads) * 0.06 - float(_vehicle_count) * 0.5 - _traffic_pressure * 1.0, 0.0, 100.0)
 
 	_sim_hours += 0.25
 	if _sim_hours >= 24.0:
@@ -116,17 +120,17 @@ func _apply_zone_growth(snapshot: Dictionary) -> void:
 		var demand: float = 50.0
 		match ztype:
 			BuildMode.RESIDENTIAL:
-				demand = _r_demand
+				demand = _r_demand - _traffic_pressure * 0.5
 			BuildMode.COMMERCIAL:
-				demand = _c_demand
+				demand = _c_demand - _traffic_pressure * 0.35
 			BuildMode.INDUSTRIAL:
-				demand = _i_demand
+				demand = _i_demand - _traffic_pressure * 0.8
 
 		# Upgrade if demand strong and connected
-		if demand >= 70.0 and connected and level < 3:
+		if demand >= 70.0 and connected and level < 3 and _congestion_factor >= 0.55:
 			_build_controller.call("set_zone_level", cell, level + 1)
 		# Downgrade if demand weak
-		elif demand <= 30.0 and level > 1:
+		elif demand <= 30.0 or _traffic_pressure > 18.0 and level > 1:
 			_build_controller.call("set_zone_level", cell, level - 1)
 
 func _update_stats_label() -> void:
@@ -150,7 +154,7 @@ func _update_stats_label() -> void:
 	var unemployment: int = maxi(_population - employed, 0)
 	var households: int = int(round(float(_population) / 2.6))
 
-	_stats_label.text = "Time %02d:%02d  |  Pop %d  HH %d  Jobs %d  Unemp %d  Treasury $%d\nRoads %d  Zones R:%d C:%d I:%d  |  Demand R:%d C:%d I:%d  |  Traffic %d  Cong %.2f  Comm %d" % [
+	_stats_label.text = "Time %02d:%02d  |  Pop %d  HH %d  Jobs %d  Unemp %d  Treasury $%d\nRoads %d  Zones R:%d C:%d I:%d  |  Demand R:%d C:%d I:%d  |  Traffic %d  Cong %.2f  Pressure %.1f  Comm %d" % [
 		int(floor(_sim_hours)),
 		int(round((_sim_hours - floor(_sim_hours)) * 60.0)) % 60,
 		_population,
@@ -167,6 +171,7 @@ func _update_stats_label() -> void:
 		int(round(_i_demand)),
 		_vehicle_count,
 		_congestion_factor,
+		_traffic_pressure,
 		_commuters
 	]
 
@@ -218,4 +223,5 @@ func _on_city_loaded(payload: Dictionary) -> void:
 func _on_traffic_changed(vehicle_count: int, congestion_factor: float) -> void:
 	_vehicle_count = vehicle_count
 	_congestion_factor = clampf(congestion_factor, 0.35, 1.0)
+	_traffic_pressure = float(_vehicle_count) * (1.0 - _congestion_factor) * 1.5
 	_commuters = int(round(float(_population) * (1.0 - _congestion_factor) * 0.55))

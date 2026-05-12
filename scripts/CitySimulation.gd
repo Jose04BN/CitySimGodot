@@ -1,6 +1,7 @@
 extends Node
 
 @export var build_controller_path: NodePath
+@export var traffic_controller_path: NodePath
 @export var stats_label_path: NodePath
 @export var tick_seconds: float = 1.0
 @export var starting_treasury: float = 50000.0
@@ -14,6 +15,7 @@ enum BuildMode {
 }
 
 var _build_controller: Node
+var _traffic_controller: Node
 var _stats_label: Label
 
 var _accum: float = 0.0
@@ -26,9 +28,13 @@ var _i_demand: float = 50.0
 var _history_size: int = 40
 var _pop_history: Array = []
 var _treasury_history: Array = []
+var _vehicle_count: int = 0
+var _congestion_factor: float = 1.0
+var _commuters: int = 0
 
 func _ready() -> void:
 	_build_controller = get_node(build_controller_path)
+	_traffic_controller = get_node_or_null(traffic_controller_path)
 	_stats_label = get_node_or_null(stats_label_path)
 	_treasury = starting_treasury
 
@@ -36,6 +42,8 @@ func _ready() -> void:
 		_build_controller.connect("about_to_save", Callable(self, "_on_about_to_save"))
 	if _build_controller.has_signal("city_loaded"):
 		_build_controller.connect("city_loaded", Callable(self, "_on_city_loaded"))
+	if _traffic_controller != null and _traffic_controller.has_signal("traffic_changed"):
+		_traffic_controller.connect("traffic_changed", Callable(self, "_on_traffic_changed"))
 
 	_update_stats_label()
 
@@ -74,11 +82,13 @@ func _tick_simulation() -> void:
 
 	var tax_income: float = float(_population) * 1.8 + float(com_zones) * 4.0 + float(ind_zones) * 5.5
 	var service_cost: float = float(roads) * 1.4 + float(_population) * 0.7 + 40.0
+	service_cost += float(_vehicle_count) * 0.25
+	tax_income += float(_commuters) * 0.2
 	_treasury += tax_income - service_cost
 
 	_r_demand = clampf(50.0 + float(jobs_capacity - _population) * 0.25 - float(res_zones) * 0.4, 0.0, 100.0)
 	_c_demand = clampf(45.0 + float(_population - com_jobs) * 0.30 + float(roads) * 0.08, 0.0, 100.0)
-	_i_demand = clampf(40.0 + float(_population - ind_jobs) * 0.22 + float(roads) * 0.06, 0.0, 100.0)
+	_i_demand = clampf(40.0 + float(_population - ind_jobs) * 0.22 + float(roads) * 0.06 - float(_vehicle_count) * 0.5, 0.0, 100.0)
 
 	_sim_hours += 0.25
 	if _sim_hours >= 24.0:
@@ -140,7 +150,7 @@ func _update_stats_label() -> void:
 	var unemployment: int = maxi(_population - employed, 0)
 	var households: int = int(round(float(_population) / 2.6))
 
-	_stats_label.text = "Time %02d:%02d  |  Pop %d  HH %d  Jobs %d  Unemp %d  Treasury $%d\nRoads %d  Zones R:%d C:%d I:%d  |  Demand R:%d C:%d I:%d" % [
+	_stats_label.text = "Time %02d:%02d  |  Pop %d  HH %d  Jobs %d  Unemp %d  Treasury $%d\nRoads %d  Zones R:%d C:%d I:%d  |  Demand R:%d C:%d I:%d  |  Traffic %d  Cong %.2f  Comm %d" % [
 		int(floor(_sim_hours)),
 		int(round((_sim_hours - floor(_sim_hours)) * 60.0)) % 60,
 		_population,
@@ -154,7 +164,10 @@ func _update_stats_label() -> void:
 		ind_zones,
 		int(round(_r_demand)),
 		int(round(_c_demand)),
-		int(round(_i_demand))
+		int(round(_i_demand)),
+		_vehicle_count,
+		_congestion_factor,
+		_commuters
 	]
 
 	# append simple sparkline for population
@@ -201,3 +214,8 @@ func _on_city_loaded(payload: Dictionary) -> void:
 	_r_demand = float(sim.get("r_demand", 50.0))
 	_c_demand = float(sim.get("c_demand", 50.0))
 	_i_demand = float(sim.get("i_demand", 50.0))
+
+func _on_traffic_changed(vehicle_count: int, congestion_factor: float) -> void:
+	_vehicle_count = vehicle_count
+	_congestion_factor = clampf(congestion_factor, 0.35, 1.0)
+	_commuters = int(round(float(_population) * (1.0 - _congestion_factor) * 0.55))

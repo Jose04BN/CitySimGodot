@@ -26,6 +26,7 @@ hud_label_path = NodePath("../HUD/Panel/Label")
 [node name="CitySimulation" type="Node" parent="."]
 script = ExtResource("6")
 build_controller_path = NodePath("../BuildController")
+traffic_controller_path = NodePath("../TrafficController")
 stats_label_path = NodePath("../HUD/Panel/StatsLabel")
 
 [node name="Pathfinder" type="Node" parent="."]

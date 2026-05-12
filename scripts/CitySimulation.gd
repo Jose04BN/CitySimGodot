@@ -93,6 +93,16 @@ func _tick_simulation() -> void:
 
 	_pollution = clampf(_pollution + float(ind_zones) * 0.5 + float(_vehicle_count) * 0.12 - float(roads) * 0.08 - 0.6, 0.0, 100.0)
 	_happiness = clampf(70.0 + _commute_access_score * 18.0 - _traffic_pressure * 0.5 - _pollution * 0.45, 0.0, 100.0)
+
+	# Parks reduce pollution and raise happiness
+	if _build_controller != null:
+		var parks_variant: Variant = _build_controller.call("get_parks")
+		if typeof(parks_variant) == TYPE_ARRAY:
+			var park_count: int = int(parks_variant.size())
+			_pollution = clampf(_pollution - float(park_count) * 0.6, 0.0, 100.0)
+			_happiness = clampf(_happiness + float(park_count) * 0.4, 0.0, 100.0)
+
+	_update_health_state()
 	_update_health_state()
 
 	var desired_population: int = mini(res_capacity, int(float(jobs_capacity) * (0.9 + _happiness * 0.004) * commute_bonus))

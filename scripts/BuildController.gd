@@ -8,7 +8,8 @@ enum BuildMode {
 	RESIDENTIAL,
 	COMMERCIAL,
 	INDUSTRIAL,
-	ERASE
+	ERASE,
+	PARK
 }
 
 @export var grid_path: NodePath
@@ -30,6 +31,7 @@ var _city_happiness: float = 60.0
 
 var _road_tiles: Dictionary = {}
 var _zone_tiles: Dictionary = {}
+var _park_tiles: Dictionary = {}
 
 func _ready() -> void:
 	_grid = get_node(grid_path)
@@ -58,6 +60,8 @@ func _match_mode_shortcut(keycode: Key) -> void:
 			_mode = BuildMode.INDUSTRIAL
 		KEY_E:
 			_mode = BuildMode.ERASE
+		KEY_P:
+			_mode = BuildMode.PARK
 		KEY_H:
 			_pollution_overlay_visible = not _pollution_overlay_visible
 			_refresh_pollution_overlay()
@@ -99,6 +103,8 @@ func _apply_build_action(mouse_pos: Vector2) -> void:
 			_place_zone(cell, BuildMode.INDUSTRIAL)
 		BuildMode.ERASE:
 			_erase_cell(cell)
+		BuildMode.PARK:
+			_place_park(cell)
 
 func _place_road(cell: Vector2i) -> void:
 	var key := _cell_key(cell)
@@ -128,6 +134,35 @@ func _place_zone(cell: Vector2i, zone_type: BuildMode) -> void:
 
 	zone.call("set_zone", int(zone_type))
 
+func _place_park(cell: Vector2i) -> void:
+	var key := _cell_key(cell)
+	if _park_tiles.has(key):
+		return
+
+	_erase_zone(cell)
+	_erase_road(cell)
+
+	var world_pos: Vector3 = _grid.call("cell_to_world", cell)
+	var park := MeshInstance3D.new()
+	var pm := CylinderMesh.new()
+	pm.top_radius = 0.4
+	pm.bottom_radius = 0.4
+	pm.height = 0.06
+	park.mesh = pm
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.18, 0.82, 0.24)
+	mat.roughness = 1.0
+	park.material_override = mat
+	park.position = world_pos + Vector3(0.0, 0.06, 0.0)
+	_zones_parent.add_child(park)
+	_park_tiles[key] = park
+
+func get_parks() -> Array:
+	var out: Array = []
+	for key in _park_tiles.keys():
+		out.append(_key_to_cell(str(key)))
+	return out
+
 func set_zone_level(cell: Vector2i, level: int) -> void:
 	var key := _cell_key(cell)
 	if not _zone_tiles.has(key):
@@ -148,6 +183,7 @@ func is_cell_connected(cell: Vector2i) -> bool:
 func _erase_cell(cell: Vector2i) -> void:
 	_erase_road(cell)
 	_erase_zone(cell)
+	_erase_park(cell)
 
 func _erase_road(cell: Vector2i) -> void:
 	var key := _cell_key(cell)
@@ -164,6 +200,14 @@ func _erase_zone(cell: Vector2i) -> void:
 	var zone: Node3D = _zone_tiles[key]
 	zone.queue_free()
 	_zone_tiles.erase(key)
+
+func _erase_park(cell: Vector2i) -> void:
+	var key := _cell_key(cell)
+	if not _park_tiles.has(key):
+		return
+	var park: Node3D = _park_tiles[key]
+	park.queue_free()
+	_park_tiles.erase(key)
 
 func _cell_key(cell: Vector2i) -> String:
 	return str(cell.x) + ":" + str(cell.y)
@@ -185,7 +229,7 @@ func _update_hud() -> void:
 		BuildMode.ERASE:
 			mode_text = "Erase"
 
-	_hud_label.text = "Mode: %s | 1 Road | 2 Residential | 3 Commercial | 4 Industrial | E Erase | H Overlay | LMB Place | F5 Save | F9 Load | RMB Rotate Camera | WASD Move" % mode_text
+	_hud_label.text = "Mode: %s | 1 Road | 2 Residential | 3 Commercial | 4 Industrial | P Park | E Erase | H Overlay | LMB Place | F5 Save | F9 Load | RMB Rotate Camera | WASD Move" % mode_text
 
 func save_city() -> void:
 	var roads: Array = []
@@ -205,6 +249,12 @@ func save_city() -> void:
 	emit_signal("about_to_save", payload)
 	var file := FileAccess.open(save_file_path, FileAccess.WRITE)
 	if file:
+		# include parks in saved payload
+		var parks: Array = []
+		for key in _park_tiles.keys():
+			var cell := _key_to_cell(str(key))
+			parks.append({"x": cell.x, "y": cell.y})
+		payload["parks"] = parks
 		file.store_string(JSON.stringify(payload))
 
 func load_city() -> void:
@@ -233,6 +283,11 @@ func load_city() -> void:
 		_place_zone(cell, zone_type as BuildMode)
 		var level := int(entry.get("level", 1))
 		set_zone_level(cell, level)
+
+	# restore parks if present
+	for p in payload.get("parks", []):
+		var pc := Vector2i(int(p.get("x", 0)), int(p.get("y", 0)))
+		_place_park(pc)
 
 	emit_signal("city_loaded", payload)
 

@@ -355,8 +355,11 @@ func _clear_all() -> void:
 		(road as Node).queue_free()
 	for zone in _zone_tiles.values():
 		(zone as Node).queue_free()
+	for park in _park_tiles.values():
+		(park as Node).queue_free()
 	_road_tiles.clear()
 	_zone_tiles.clear()
+	_park_tiles.clear()
 
 func _key_to_cell(key: String) -> Vector2i:
 	var parts := key.split(":")

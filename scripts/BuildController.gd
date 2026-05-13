@@ -2,6 +2,7 @@ extends Node3D
 
 signal about_to_save(payload: Dictionary)
 signal city_loaded(payload: Dictionary)
+signal park_placed(cost: float)
 
 enum BuildMode {
 	ROAD,
@@ -18,12 +19,19 @@ enum BuildMode {
 @export var roads_parent_path: NodePath
 @export var zones_parent_path: NodePath
 @export var hud_label_path: NodePath
+@export var notification_label_path: NodePath
+@export var simulation_path: NodePath
+@export var park_cost: float = 2000.0
 @export var save_file_path := "user://city_save.json"
 
 var _grid: Node3D
 var _roads_parent: Node3D
 var _zones_parent: Node3D
 var _hud_label: Label
+var _notification_label: Label
+var _simulation: Node
+var _notification_timer: float = 0.0
+var _notification_duration: float = 3.0
 var _mode: BuildMode = BuildMode.ROAD
 var _pollution_overlay_visible: bool = true
 var _city_pollution: float = 0.0
@@ -38,8 +46,16 @@ func _ready() -> void:
 	_roads_parent = get_node(roads_parent_path)
 	_zones_parent = get_node(zones_parent_path)
 	_hud_label = get_node_or_null(hud_label_path)
+	_notification_label = get_node_or_null(notification_label_path)
+	_simulation = get_node_or_null(simulation_path)
 	_update_hud()
 	_refresh_pollution_overlay()
+	
+	# Wire up notification signals
+	if _simulation != null and _simulation.has_signal("health_alert_changed"):
+		_simulation.connect("health_alert_changed", Callable(self, "_on_health_alert_changed"))
+	if has_signal("park_placed"):
+		connect("park_placed", Callable(self, "_on_park_placed"))
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -47,6 +63,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		_apply_build_action(event.position)
+
+func _process(delta: float) -> void:
+	# Handle notification fade-out
+	if _notification_timer > 0.0:
+		_notification_timer -= delta
+		if _notification_timer <= 0.0 and _notification_label != null:
+			_notification_label.text = ""
 
 func _match_mode_shortcut(keycode: Key) -> void:
 	match keycode:
@@ -139,10 +162,25 @@ func _place_park(cell: Vector2i) -> void:
 	if _park_tiles.has(key):
 		return
 
+	# Check if simulation has enough treasury
+	if _simulation != null:
+		var treasury_variant: Variant = _simulation.get("_treasury")
+		if typeof(treasury_variant) == TYPE_FLOAT:
+			var treasury: float = treasury_variant
+			if treasury < park_cost:
+				return
+
 	_erase_zone(cell)
 	_erase_road(cell)
 
 	var world_pos: Vector3 = _grid.call("cell_to_world", cell)
+	
+	# Create a container node for park visuals
+	var park_container := Node3D.new()
+	park_container.position = world_pos
+	_zones_parent.add_child(park_container)
+	
+	# Create main park visual (cylinder)
 	var park := MeshInstance3D.new()
 	var pm := CylinderMesh.new()
 	pm.top_radius = 0.4
@@ -153,9 +191,30 @@ func _place_park(cell: Vector2i) -> void:
 	mat.albedo_color = Color(0.18, 0.82, 0.24)
 	mat.roughness = 1.0
 	park.material_override = mat
-	park.position = world_pos + Vector3(0.0, 0.06, 0.0)
-	_zones_parent.add_child(park)
-	_park_tiles[key] = park
+	park.position = Vector3(0.0, 0.06, 0.0)
+	park_container.add_child(park)
+	
+	# Create effect radius indicator (transparent ring at ground level)
+	var radius_indicator := MeshInstance3D.new()
+	var tube := TorusMesh.new()
+	tube.inner_radius = 0.8
+	tube.outer_radius = 0.85
+	tube.height = 0.01
+	radius_indicator.mesh = tube
+	var ring_mat := StandardMaterial3D.new()
+	ring_mat.albedo_color = Color(0.0, 1.0, 0.5, 0.3)
+	ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ring_mat.no_depth_test = false
+	radius_indicator.material_override = ring_mat
+	radius_indicator.position = Vector3(0.0, 0.02, 0.0)
+	park_container.add_child(radius_indicator)
+	
+	_park_tiles[key] = park_container
+
+	# Deduct cost from treasury
+	if _simulation != null:
+		_simulation.set("_treasury", float(_simulation.get("_treasury")) - park_cost)
+		emit_signal("park_placed", park_cost)
 
 func get_parks() -> Array:
 	var out: Array = []
@@ -379,3 +438,24 @@ func get_road_cells() -> Array:
 	for key in _road_tiles.keys():
 		out.append(_key_to_cell(str(key)))
 	return out
+
+func _on_health_alert_changed(new_state: String) -> void:
+	if _notification_label == null:
+		return
+	if new_state == "Smog Alert":
+		_notification_label.text = "⚠️ SMOG ALERT: Pollution exceeds 82! Build parks to mitigate."
+		_notification_label.add_theme_color_override("font_color", Color.RED)
+		_notification_timer = _notification_duration
+	elif new_state == "Warning":
+		_notification_label.text = "⚠️ WARNING: Pollution rising (65+) and happiness declining (45-)"
+		_notification_label.add_theme_color_override("font_color", Color.YELLOW)
+		_notification_timer = _notification_duration
+	else:
+		_notification_label.text = ""
+
+func _on_park_placed(cost: float) -> void:
+	if _notification_label == null:
+		return
+	_notification_label.text = "✓ Park built for $%.0f" % cost
+	_notification_label.add_theme_color_override("font_color", Color.GREEN)
+	_notification_timer = _notification_duration

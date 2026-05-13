@@ -1,5 +1,7 @@
 extends Node
 
+signal health_alert_changed(new_state: String)
+
 @export var build_controller_path: NodePath
 @export var pathfinder_path: NodePath
 @export var traffic_controller_path: NodePath
@@ -8,6 +10,8 @@ extends Node
 @export var starting_treasury: float = 50000.0
 @export var citizen_spawn_interval: float = 2.0
 @export var citizen_cap: int = 18
+@export var park_cost: float = 2000.0
+@export var park_maintenance_cost: float = 50.0
 
 enum BuildMode {
 	ROAD,
@@ -41,6 +45,7 @@ var _commute_access_score: float = 0.5
 var _pollution: float = 12.0
 var _happiness: float = 60.0
 var _health_alert: String = "Stable"
+var _prev_health_alert: String = "Stable"
 var _health_crisis_timer: float = 0.0
 var _citizen_spawn_accum: float = 0.0
 var _citizen_scene: Script = preload("res://scripts/Citizen.gd")
@@ -103,7 +108,6 @@ func _tick_simulation() -> void:
 			_happiness = clampf(_happiness + float(park_count) * 0.4, 0.0, 100.0)
 
 	_update_health_state()
-	_update_health_state()
 
 	var desired_population: int = mini(res_capacity, int(float(jobs_capacity) * (0.9 + _happiness * 0.004) * commute_bonus))
 	if desired_population > _population:
@@ -118,6 +122,12 @@ func _tick_simulation() -> void:
 
 	_population = clampi(_population, 0, res_capacity)
 
+	var parks_count: int = 0
+	if _build_controller != null:
+		var parks_variant: Variant = _build_controller.call("get_parks")
+		if typeof(parks_variant) == TYPE_ARRAY:
+			parks_count = int(parks_variant.size())
+
 	var tax_income: float = float(_population) * 1.8 + float(com_zones) * 4.0 + float(ind_zones) * 5.5
 	var service_cost: float = float(roads) * 1.4 + float(_population) * 0.7 + 40.0
 	service_cost += float(_vehicle_count) * 0.25
@@ -125,6 +135,8 @@ func _tick_simulation() -> void:
 	service_cost += _pollution * 0.12
 	if _health_alert != "Stable":
 		service_cost += 12.0
+	# Add park maintenance cost
+	service_cost += float(parks_count) * park_maintenance_cost
 	tax_income += float(_commuters) * 0.2
 	tax_income += _commute_access_score * 2.0
 	tax_income += _happiness * 0.05
@@ -352,6 +364,11 @@ func _update_health_state() -> void:
 	else:
 		_health_crisis_timer = max(_health_crisis_timer - tick_seconds, 0.0)
 		_health_alert = "Stable"
+
+	# Emit signal if health alert state changed
+	if _health_alert != _prev_health_alert:
+		emit_signal("health_alert_changed", _health_alert)
+		_prev_health_alert = _health_alert
 
 	if _health_crisis_timer > 0.0 and _health_alert == "Smog Alert":
 		_pollution = clampf(_pollution + 0.25, 0.0, 100.0)
